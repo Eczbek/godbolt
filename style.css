@@ -40,8 +40,17 @@ html, body {
 	height: 100%;
 }
 
-#output {
+#output > pre {
 	padding: 10px;
 	color: #ffffff;
 	font-size: 14px;
+}
+
+#flags {
+	color: #ffffff;
+	background: #222222;
+	border: 0;
+	padding: 0;
+	height: 2em;
+	width: 100%;
 }

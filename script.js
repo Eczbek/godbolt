@@ -22,13 +22,16 @@ for (const tab of tabs) {
 
 const output = document.querySelector('#output > pre > code');
 const status = document.querySelector('#status');
+const flags = document.querySelector('#flags');
 
 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
 require(['vs/editor/editor.main'], () => {
-	const compile = debounce(1000, async (code) => {
+	const compile = debounce(1000, async (code, flags) => {
+		code ??= '';
+		flags ??= '';
 		const url = new URL(location);
 		if (code) {
-			url.searchParams.set('z', btoa(code));
+			url.searchParams.set('z', btoa(JSON.stringify({ code, flags })));
 			history.replaceState({}, '', url);
 		} else {
 			url.searchParams.delete('z');
@@ -45,7 +48,7 @@ require(['vs/editor/editor.main'], () => {
 			body: JSON.stringify({
 				source: code,
 				options: {
-					userArguments: `-std=c++26 -freflection -Wpedantic -Wall -Wextra -Wconversion -Wsign-conversion -fdiagnostics-color=never`,
+					userArguments: `${flags} -fdiagnostics-color=never`,
 					compilerOptions: {
 						skipAsm: true
 					},
@@ -66,23 +69,30 @@ require(['vs/editor/editor.main'], () => {
 		} else if (result.execResult?.timedOut) {
 			output_text.push('<Program timed out>');
 		} else if (result.execResult) {
-			output_text.push(result.execResult.stdout.join('\n') || '<No program output>');
+			output_text.push(result.execResult.stdout.map(({ text }) => text).join('\n') || '<No program output>');
 			output_text.push(`Program returned: ${result.execResult.code}`);
 		}
 		output.innerText = output_text.join('\n\n');
 		status.innerText = 'Output';
 	});
 
-	const initial = atob(new URL(location).searchParams.get('z') || '');
+	let initial = {};
+	try {
+		initial = JSON.parse(atob(new URL(location).searchParams.get('z') || '{}'));
+	} catch {}
+	flags.value = initial.flags ?? '-std=c++26 -freflection -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion';
 	const editor = monaco.editor.create(document.querySelector('#source'), {
 		language: 'cpp',
-		value: initial,
+		value: initial.code,
 		theme: 'vs-dark',
 		automaticLayout: true,
 		minimap: { enabled: false }
 	});
-	compile(initial);
-	source.addEventListener('keydown', () => {
-		compile(editor.getValue());
+	compile(initial.code, flags.value);
+	source.addEventListener('input', () => {
+		compile(editor.getValue(), flags.value);
+	});
+	flags.addEventListener('input', () => {
+		compile(editor.getValue(), flags.value);
 	});
 });
