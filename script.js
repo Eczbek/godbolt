@@ -38,13 +38,16 @@ function clean_output(str) {
 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
 require(['vs/editor/editor.main'], () => {
 	const compile = debounce(1000, async (code) => {
-		if (!code) {
+		const url = new URL(location);
+		if (code) {
+			url.searchParams.set('z', btoa(code));
+			history.replaceState({}, '', url);
+		} else {
+			url.searchParams.delete('z');
+			history.replaceState({}, '', url);
 			return;
 		}
 		status.innerText = 'Compiling...';
-		const url = new URL(location);
-		url.searchParams.set('z', btoa(code));
-		history.replaceState({}, '', url);
 		output.innerText = clean_output(await (await fetch('https://godbolt.org/api/compiler/gsnapshot/compile', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
