@@ -17,6 +17,7 @@ const flags = document.querySelector('#flags');
 const recompile = document.querySelector('#recompile');
 const lang_select = document.querySelector('#lang-select');
 const compiler_select = document.querySelector('#compiler-select');
+const libs_select = document.querySelector('#libs-select');
 const short_link = document.querySelector('#short-link');
 
 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
@@ -40,6 +41,7 @@ const config = {
 		'c++': 'gsnapshot',
 		'c': 'cgsnapshot'
 	},
+	libs: {},
 	flags: {
 		'gsnapshot': '-std=c++26 -freflection -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion',
 		'clang_trunk': '-std=c++26 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion',
@@ -74,19 +76,20 @@ require(['vs/editor/editor.main'], async () => {
 		const option = document.createElement('option');
 		option.innerText = lang.name;
 		if (lang.id === config.lang) {
-			option.setAttribute('selected', '');
+			option.selected = true;
 		}
 		lang_select.appendChild(option);
 	}
 	let compilers = {};
+	let libs = [];
 	const editor = monaco.editor.create(source, {
-		language: monaco_langs[config.lang] ?? langs.find(({ id }) => id == config.lang).monaco,
+		language: monaco_langs[config.lang] ?? langs.find(({ id }) => id === config.lang).monaco,
 		value: config.code,
 		theme: 'vs-dark',
 		automaticLayout: true,
 		minimap: { enabled: false }
 	});
-	async function update_compilers_list() {
+	async function load_language_things() {
 		compilers = await (await fetch(`https://godbolt.org/api/compilers/${config.lang}`, { headers: { 'Accept': 'application/json' } })).json();
 		while (compiler_select.lastElementChild) {
 			compiler_select.removeChild(compiler_select.lastElementChild);
@@ -95,9 +98,32 @@ require(['vs/editor/editor.main'], async () => {
 			const option = document.createElement('option');
 			option.innerText = compiler.name;
 			if (compiler.id === config.compilers[config.lang]) {
-				option.setAttribute('selected', '');
+				option.selected = true;
 			}
 			compiler_select.appendChild(option);
+		}
+		libs = await (await fetch(`https://godbolt.org/api/libraries/${config.lang}`, { headers: { 'Accept': 'application/json' } })).json();
+		while (libs_select.lastElementChild) {
+			libs_select.removeChild(libs_select.lastElementChild);
+		}
+		for (const lib of libs) {
+			const div = document.createElement('div');
+			const name = document.createElement('span');
+			name.innerText = lib.name + ' ';
+			div.appendChild(name);
+			const versions = document.createElement('select');
+			const default_option = document.createElement('option');
+			versions.appendChild(default_option);
+			for (const { version } of lib.versions) {
+				const option = document.createElement('option');
+				option.innerText = version;
+				if (config.libs[config.lang]?.[lib.id] === version) {
+					option.selected = true;
+				}
+				versions.appendChild(option);
+			}
+			div.appendChild(versions);
+			libs_select.appendChild(div);
 		}
 	}
 	let current_promise;
@@ -116,12 +142,10 @@ require(['vs/editor/editor.main'], async () => {
 						source: config.code,
 						options: {
 							userArguments: config.flags[config.compilers[config.lang]],
-							compilerOptions: {
-								skipAsm: true
-							},
 							filters: {
 								execute: true
-							}
+							},
+							libraries: Object.entries(config.libs[config.lang] ?? {}).map(([id, version]) => ({ id, version }))
 						}
 					})
 				})).json();
@@ -148,6 +172,7 @@ require(['vs/editor/editor.main'], async () => {
 			code: config.code,
 			lang: config.lang,
 			compilers: config.compilers,
+			libs: config.libs,
 			flags: config.flags
 		}));
 		if (!current_promise) {
@@ -164,13 +189,22 @@ require(['vs/editor/editor.main'], async () => {
 
 	lang_select.addEventListener('change', async () => {
 		config.lang = langs[lang_select.selectedIndex].id;
-		update_compilers_list();
+		load_language_things();
 		editor.getModel().setLanguage(monaco_langs[config.lang] ?? langs[lang_select.selectedIndex].monaco);
 		await compile();
 	});
 	compiler_select.addEventListener('change', async () => {
 		config.compilers[config.lang] = compilers[compiler_select.selectedIndex].id;
 		flags.value = config.flags[config.compilers[config.lang]] ?? '';
+		await compile();
+	});
+	libs_select.addEventListener('change', async () => {
+		config.libs[config.lang] = {};
+		for (const option of document.querySelectorAll('#libs-select > div > select > option')) {
+			if (option.selected && option.innerText.length) {
+				config.libs[config.lang][libs.find(({ name }) => name === option.parentNode.parentNode.firstChild.innerText).id] = option.innerText;
+			}
+		}
 		await compile();
 	});
 	flags.addEventListener('change', async () => {
@@ -186,40 +220,43 @@ require(['vs/editor/editor.main'], async () => {
 	});
 	recompile.addEventListener('click', async () => await compile());
 	short_link.addEventListener('click', async () => {
-		const { url } = await (await fetch('https://godbolt.org/api/shortener', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Accept': 'application/json'
-			},
-			body: JSON.stringify({
-				sessions: [
-					{
-						language: config.lang,
-						source: config.code,
-						compilers: [
-							{
-								id: config.compilers[config.lang],
-								options: config.flags[config.compilers[config.lang]],
-								filter: {
-									execute: true
-								},
-								libs: [] // TODO
-							},
-						]
-					}
-				]
-			})
-		})).json();
-		navigator.clipboard.writeText(url);
-
-		const otherthing = new URL(location);
-		otherthing.searchParams.set('z', url.split('/').at(-1));
-		history.replaceState({}, '', otherthing);
-
+		const url = new URL(location);
+		if (url.searchParams.has('z')) {
+			navigator.clipboard.writeText(`https://godbolt.org/z/${url.searchParams.get('z')}`);
+		} else {
+			const data = await (await fetch('https://godbolt.org/api/shortener', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'application/json'
+				},
+				body: JSON.stringify({
+					sessions: [
+						{
+							language: config.lang,
+							source: config.code,
+							compilers: [
+								{
+									id: config.compilers[config.lang],
+									options: config.flags[config.compilers[config.lang]],
+									filters: {
+										execute: true
+									},
+									libs: Object.entries(config.libs[config.lang] ?? {}).map(([name, ver]) => ({ name, ver })),
+									specialoutputs: ['compilerOutput']
+								}
+							]
+						}
+					]
+				})
+			})).json();
+			navigator.clipboard.writeText(data.url);
+			url.searchParams.set('z', data.url.split('/').at(-1));
+			history.replaceState({}, '', url);
+		}
 		alert(`Saved to clipboard!`);
 	});
 
-	await update_compilers_list();
+	await load_language_things();
 	await compile();
 });

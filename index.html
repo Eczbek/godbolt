@@ -16,15 +16,18 @@
 		<div id="output" class="panel">
 			<input id="flags" placeholder="Compiler flags..."></input>
 			<button id="recompile">Recompile</button>
+			<button id="short-link">Short Link</button>
 			<pre><code></code></pre>
 		</div>
 		<div id="config" class="panel">
+			<b>Language:</b>
 			<select id="lang-select"></select>
+			<br/>
+			<b>Compiler:</b>
 			<select id="compiler-select"></select>
 			<br/>
-			<br/>
-			<br/>
-			<button id="short-link">Compiler Explorer short link</button>
+			<b>Libraries:</b>
+			<div id="libs-select"></div>
 		</div>
 
 		<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs/loader.js"></script>
