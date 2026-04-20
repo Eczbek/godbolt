@@ -45,7 +45,7 @@ const config = {
 		'clang_trunk': '-std=c++26 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion',
 		'cgsnapshot': '-std=c2y -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion'
 	},
-	...(JSON.parse(localStorage.getItem('stuff')) ?? {})
+	...(JSON.parse(localStorage.getItem('config')) ?? {})
 };
 
 const monaco_langs = {
@@ -144,11 +144,10 @@ require(['vs/editor/editor.main'], async () => {
 				resolve();
 			});
 		}
-		config.code = editor.getValue().trim();
-		localStorage.setItem('stuff', JSON.stringify({
+		localStorage.setItem('config', JSON.stringify({
 			code: config.code,
 			lang: config.lang,
-			compiler: config.compilers,
+			compilers: config.compilers,
 			flags: config.flags
 		}));
 		if (!current_promise) {
@@ -174,11 +173,12 @@ require(['vs/editor/editor.main'], async () => {
 		flags.value = config.flags[config.compilers[config.lang]] ?? '';
 		await compile();
 	});
-	flags.addEventListener('change', () => {
+	flags.addEventListener('change', async () => {
 		config.flags[config.compilers[config.lang]] = flags.value ?? '';
-		compile_debounce();
+		await compile();
 	});
 	editor.onDidChangeModelContent(() => {
+		config.code = editor.getValue().trim();
 		const url = new URL(location);
 		url.searchParams.delete('z');
 		history.replaceState({}, '', url);
