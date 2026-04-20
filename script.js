@@ -59,13 +59,15 @@ require(['vs/editor/editor.main'], () => {
 		if (result.stderr.length) {
 			output_text.push(result.stderr.map(({ text }) => text).join('\n'));
 		}
-		if (result.code) {
+		if (result.timedOut) {
+			output_text.push('<Compiler timed out>');
+		} else if (result.code) {
 			output_text.push(`Compiler returned: ${result.code}`);
+		} else if (result.execResult?.timedOut) {
+			output_text.push('<Program timed out>');
 		} else if (result.execResult) {
+			output_text.push(result.execResult.stdout.join('\n') || '<No program output>');
 			output_text.push(`Program returned: ${result.execResult.code}`);
-		}
-		if (result.execResult?.stdout?.length) {
-			output_text.push(result.execResult.stdout.join('\n'));
 		}
 		output.innerText = output_text.join('\n\n');
 		status.innerText = 'Output';
