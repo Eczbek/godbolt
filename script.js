@@ -131,6 +131,16 @@ require(['vs/editor/editor.main'], async () => {
 	async function compile() {
 		function get_promise() {
 			return new Promise(async (resolve) => {
+				const request = {
+					source: config.code,
+					options: {
+						userArguments: config.flags[config.compilers[config.lang]],
+						filters: {
+							execute: true
+						},
+						libraries: Object.entries(config.libs[config.lang] ?? {}).map(([id, version]) => ({ id, version }))
+					}
+				};
 				status.innerText = 'Compiling...';
 				const result = await (await fetch(`https://godbolt.org/api/compiler/${config.compilers[config.lang]}/compile`, {
 					method: 'POST',
@@ -138,16 +148,7 @@ require(['vs/editor/editor.main'], async () => {
 						'Content-Type': 'application/json',
 						'Accept': 'application/json'
 					},
-					body: JSON.stringify({
-						source: config.code,
-						options: {
-							userArguments: config.flags[config.compilers[config.lang]],
-							filters: {
-								execute: true
-							},
-							libraries: Object.entries(config.libs[config.lang] ?? {}).map(([id, version]) => ({ id, version }))
-						}
-					})
+					body: JSON.stringify(request)
 				})).json();
 				let output_text = [];
 				if (result.stderr.length) {
@@ -202,7 +203,7 @@ require(['vs/editor/editor.main'], async () => {
 		config.libs[config.lang] = {};
 		for (const option of document.querySelectorAll('#libs-select > div > select > option')) {
 			if (option.selected && option.innerText.length) {
-				config.libs[config.lang][libs.find(({ name }) => name === option.parentNode.parentNode.firstChild.innerText).id] = option.innerText;
+				config.libs[config.lang][libs.find(({ name }) => name === option.parentNode.parentNode.firstChild.innerText.trim()).id] = option.innerText;
 			}
 		}
 		await compile();

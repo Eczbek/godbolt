@@ -51,6 +51,10 @@ html, body {
 	height: 100%;
 }
 
+#config {
+	padding: 1em;
+}
+
 #flags {
 	overflow: hidden;
 	color: #ffffff;
