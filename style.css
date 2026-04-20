@@ -54,3 +54,8 @@ html, body {
 	height: 2em;
 	width: 100%;
 }
+
+#lang-select, #compiler-select, #short-link {
+	height: 2em;
+	display: block;
+}
