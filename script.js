@@ -23,18 +23,6 @@ for (const tab of tabs) {
 const output = document.querySelector('#output > pre > code');
 const status = document.querySelector('#status');
 
-function clean_output(str) {
-	const exit = 'Program returned: ' + str.split('\n# Execution result with exit code ')[1].split('\n')[0];
-	let result;
-	for (const delim of ['\n# Standard out:\n', '\nStandard error:\n']) {
-		if (str.includes(delim)) {
-			result = str.split(delim)[1];
-			break;
-		}
-	}
-	return result ? (result + '\n\n' + exit) : exit;
-}
-
 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
 require(['vs/editor/editor.main'], () => {
 	const compile = debounce(1000, async (code) => {
@@ -48,11 +36,14 @@ require(['vs/editor/editor.main'], () => {
 			return;
 		}
 		status.innerText = 'Compiling...';
-		output.innerText = clean_output(await (await fetch('https://godbolt.org/api/compiler/gsnapshot/compile', {
+		const result = await (await fetch('https://godbolt.org/api/compiler/gsnapshot/compile', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json'
+			},
 			body: JSON.stringify({
-				source: editor.getValue(),
+				source: code,
 				options: {
 					userArguments: `-std=c++26 -freflection -Wpedantic -Wall -Wextra -Wconversion -Wsign-conversion -fdiagnostics-color=never`,
 					compilerOptions: {
@@ -63,7 +54,20 @@ require(['vs/editor/editor.main'], () => {
 					}
 				}
 			})
-		})).text());
+		})).json();
+		let output_text = [];
+		if (result.stderr.length) {
+			output_text.push(result.stderr.map(({ text }) => text).join('\n'));
+		}
+		if (result.code) {
+			output_text.push(`Compiler returned: ${result.code}`);
+		} else if (result.execResult) {
+			output_text.push(`Program returned: ${result.execResult.code}`);
+		}
+		if (result.execResult?.stdout?.length) {
+			output_text.push(result.execResult.stdout.join('\n'));
+		}
+		output.innerText = output_text.join('\n\n');
 		status.innerText = 'Output';
 	});
 
