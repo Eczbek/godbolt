@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta name="viewport" content="width=device-width"/>
+
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+		<link rel="stylesheet" href="style.css"/>
+
+		<link rel="shortcut icon" href="icon.png"/>
+		<title>Compiler Explorer</title>
+	</head>
+	<body>
+		<div id="tabs">
+			<div class="tab active" data-target="source">Source</div>
+			<div id="status" class="tab" data-target="output">Output</div>
+		</div>
+		<div id="source" class="panel active"></div>
+		<div id="output" class="panel"><pre><code></code></pre></div>
+
+		<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs/loader.js"></script>
+		<script>
+			function debounce(wait, func) {
+				let timeout;
+				return (...args) => {
+					clearTimeout(timeout);
+					timeout = setTimeout(() => func.apply(this, args), wait);
+				};
+			}
+
+			const tabs = document.querySelectorAll('.tab');
+			const panels = document.querySelectorAll('.panel');
+			for (const tab of tabs) {
+				tab.addEventListener('click', () => {
+					for (const tab of tabs) {
+						tab.classList.remove('active');
+					}
+					tab.classList.add('active');
+					for (const panel of panels) {
+						panel.classList.toggle('active', panel.id === tab.dataset.target);
+					}
+				});
+			}
+
+			const output = document.querySelector('#output > pre > code');
+			const status = document.querySelector('#status');
+
+			function clean_output(str) {
+				const exit = 'Program returned: ' + str.split('\n# Execution result with exit code ')[1].split('\n')[0];
+				let result;
+				for (const delim of ['\n# Standard out:\n', '\nStandard error:\n']) {
+					if (str.includes(delim)) {
+						result = str.split(delim)[1];
+						break;
+					}
+				}
+				return result ? (result + '\n\n' + exit) : exit;
+			}
+
+			require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
+			require(['vs/editor/editor.main'], () => {
+				const editor = monaco.editor.create(document.querySelector('#source'), {
+					language: 'cpp',
+					value: atob(new URL(location).searchParams.get('z') || ''),
+					theme: 'vs-dark',
+					automaticLayout: true,
+					minimap: { enabled: false }
+				});
+
+				const compile = debounce(1000, async () => {
+					status.innerText = 'Compiling...';
+					const code = editor.getValue();
+					output.innerText = clean_output(await (await fetch('https://godbolt.org/api/compiler/gsnapshot/compile', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							source: editor.getValue(),
+							options: {
+								userArguments: `-std=c++26 -freflection -Wpedantic -Wall -Wextra -Wconversion -Wsign-conversion -fdiagnostics-color=never`,
+								compilerOptions: {
+									skipAsm: true
+								},
+								filters: {
+									execute: true
+								}
+							}
+						})
+					})).text());
+					const url = new URL(location);
+					url.searchParams.set('z', btoa(code));
+					history.replaceState({}, '', url);
+					status.innerText = 'Output';
+				});
+				source.addEventListener('keydown', () => {
+					compile();
+				});
+			});
+		</script>
+	</body>
+</html>
