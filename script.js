@@ -26,17 +26,20 @@ const flags = document.querySelector('#flags');
 
 require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' }});
 require(['vs/editor/editor.main'], () => {
-	const compile = debounce(1000, async (code, flags) => {
-		code ??= '';
-		flags ??= '';
+	let compiling = false;
+	async function compile() {
+		if (compiling) {
+			return;
+		}
+		compiling = true;
+		const code = editor.getValue().trim();
 		const url = new URL(location);
-		if (code) {
-			url.searchParams.set('z', btoa(JSON.stringify({ code, flags })));
+		if (code.length) {
+			url.searchParams.set('z', btoa(JSON.stringify({ code, flags: flags.value })));
 			history.replaceState({}, '', url);
 		} else {
 			url.searchParams.delete('z');
 			history.replaceState({}, '', url);
-			return;
 		}
 		status.innerText = 'Compiling...';
 		const result = await (await fetch('https://godbolt.org/api/compiler/gsnapshot/compile', {
@@ -48,7 +51,7 @@ require(['vs/editor/editor.main'], () => {
 			body: JSON.stringify({
 				source: code,
 				options: {
-					userArguments: `${flags} -fdiagnostics-color=never`,
+					userArguments: `${flags.value} -fdiagnostics-color=never`,
 					compilerOptions: {
 						skipAsm: true
 					},
@@ -74,14 +77,17 @@ require(['vs/editor/editor.main'], () => {
 		}
 		output.innerText = output_text.join('\n\n');
 		status.innerText = 'Output';
-	});
+		compiling = false;
+	}
+	const compile_debounce = debounce(1000, compile);
 
 	let initial = {};
 	try {
 		initial = JSON.parse(atob(new URL(location).searchParams.get('z') || '{}'));
 	} catch {}
 	flags.value = initial.flags ?? '-std=c++26 -freflection -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion';
-	const editor = monaco.editor.create(document.querySelector('#source'), {
+	const source = document.querySelector('#source');
+	const editor = monaco.editor.create(source, {
 		language: 'cpp',
 		value: initial.code,
 		theme: 'vs-dark',
@@ -89,10 +95,13 @@ require(['vs/editor/editor.main'], () => {
 		minimap: { enabled: false }
 	});
 	compile(initial.code, flags.value);
-	source.addEventListener('input', () => {
-		compile(editor.getValue(), flags.value);
+	source.addEventListener('change', async () => {
+		await compile_debounce(editor.getValue(), flags.value);
 	});
-	flags.addEventListener('input', () => {
-		compile(editor.getValue(), flags.value);
+	flags.addEventListener('change', async () => {
+		await compile_debounce(editor.getValue(), flags.value);
+	});
+	status.addEventListener('click', async () => {
+		await compile(editor.getValue(), flags.value);
 	});
 });
