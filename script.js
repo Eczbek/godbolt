@@ -87,6 +87,8 @@ require(['vs/editor/editor.main'], async () => {
 		value: config.code,
 		theme: 'vs-dark',
 		automaticLayout: true,
+		lineNumbersMinChars: 1,
+		lineDecorationsWidth: 0,
 		minimap: { enabled: false }
 	});
 	async function load_language_things() {
