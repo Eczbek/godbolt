@@ -194,6 +194,7 @@ require(['vs/editor/editor.main'], async () => {
 		config.lang = langs[lang_select.selectedIndex].id;
 		load_language_things();
 		editor.getModel().setLanguage(monaco_langs[config.lang] ?? langs[lang_select.selectedIndex].monaco);
+		flags.value = config.flags[config.compilers[config.lang]] ?? '';
 		await compile();
 	});
 	compiler_select.addEventListener('change', async () => {
