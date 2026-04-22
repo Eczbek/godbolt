@@ -50,9 +50,8 @@ const config = {
 	...(JSON.parse(localStorage.getItem('config')) ?? {})
 };
 
-const monaco_langs = {
-	"c": "c",
-	"c++": "cpp"
+const monaco_lang_overrides = {
+	'c++': 'cpp'
 };
 
 require(['vs/editor/editor.main'], async () => {
@@ -83,7 +82,7 @@ require(['vs/editor/editor.main'], async () => {
 	let compilers = {};
 	let libs = [];
 	const editor = monaco.editor.create(source, {
-		language: monaco_langs[config.lang] ?? langs.find(({ id }) => id === config.lang).monaco,
+		language: monaco_lang_overrides[config.lang] ?? config.lang,
 		value: config.code,
 		theme: 'vs-dark',
 		automaticLayout: true,
@@ -95,6 +94,9 @@ require(['vs/editor/editor.main'], async () => {
 		compilers = await (await fetch(`https://godbolt.org/api/compilers/${config.lang}`, { headers: { 'Accept': 'application/json' } })).json();
 		while (compiler_select.lastElementChild) {
 			compiler_select.removeChild(compiler_select.lastElementChild);
+		}
+		if (!config.compilers[config.lang]) {
+			compiler_select.appendChild(document.createElement('option'));
 		}
 		for (const compiler of compilers) {
 			const option = document.createElement('option');
@@ -114,8 +116,7 @@ require(['vs/editor/editor.main'], async () => {
 			name.innerText = lib.name + ' ';
 			div.appendChild(name);
 			const versions = document.createElement('select');
-			const default_option = document.createElement('option');
-			versions.appendChild(default_option);
+			versions.appendChild(document.createElement('option'));
 			for (const { version } of lib.versions) {
 				const option = document.createElement('option');
 				option.innerText = version;
@@ -171,6 +172,9 @@ require(['vs/editor/editor.main'], async () => {
 				resolve();
 			});
 		}
+		if (!config.compilers[config.lang]) {
+			return;
+		}
 		localStorage.setItem('config', JSON.stringify({
 			code: config.code,
 			lang: config.lang,
@@ -193,14 +197,21 @@ require(['vs/editor/editor.main'], async () => {
 	lang_select.addEventListener('change', async () => {
 		config.lang = langs[lang_select.selectedIndex].id;
 		load_language_things();
-		editor.getModel().setLanguage(monaco_langs[config.lang] ?? langs[lang_select.selectedIndex].monaco);
+		editor.getModel().setLanguage(monaco_lang_overrides[config.lang] ?? config.lang);
 		flags.value = config.flags[config.compilers[config.lang]] ?? '';
-		await compile();
+		if (config.compilers[config.lang]) {
+			await compile();
+		}
 	});
 	compiler_select.addEventListener('change', async () => {
-		config.compilers[config.lang] = compilers[compiler_select.selectedIndex].id;
-		flags.value = config.flags[config.compilers[config.lang]] ?? '';
-		await compile();
+		if (compiler_select.childNodes[compiler_select.selectedIndex].innerText.length) {
+			if (!compiler_select.childNodes[0].innerText.length) {
+				compiler_select.removeChild(compiler_select.childNodes[0]);
+			}
+			config.compilers[config.lang] = compilers[compiler_select.selectedIndex].id;
+			flags.value = config.flags[config.compilers[config.lang]] ?? '';
+			await compile();
+		}
 	});
 	libs_select.addEventListener('change', async () => {
 		config.libs[config.lang] = {};
@@ -222,7 +233,13 @@ require(['vs/editor/editor.main'], async () => {
 		history.replaceState({}, '', url);
 		compile_debounce();
 	});
-	recompile.addEventListener('click', async () => await compile());
+	recompile.addEventListener('click', async () => {
+		if (config.compilers[config.lang]) {
+			await compile();
+		} else {
+			alert('No compiler selected!');
+		}
+	});
 	short_link.addEventListener('click', async () => {
 		const url = new URL(location);
 		if (url.searchParams.has('z')) {
